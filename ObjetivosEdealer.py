@@ -1,0 +1,57 @@
+# app.py
+from fastapi import FastAPI
+from pydantic import BaseModel
+from typing import Optional
+import mysql.connector
+
+app = FastAPI()
+
+class Objetivo(BaseModel):
+    anio: int
+    mes: int
+    clientes_brutos: Optional[int] = None
+    clientes_netos: Optional[int] = None
+    rgus_netas: Optional[int] = None
+
+def get_conn():
+    return mysql.connector.connect(
+        host="10.118.33.11",
+        user="replication",
+        password="Inc0nc3rt!2025",
+        database="BI_VODAFONE_E2E"
+    )
+
+@app.post("/upsert_objetivos")
+def upsert(obj: Objetivo):
+    conn = get_conn()
+    cur = conn.cursor()
+    # ¿Existe?
+    cur.execute("SELECT COUNT(*) FROM Objetivos_Edealer WHERE Anio=%s AND Mes=%s", (obj.anio, obj.mes))
+    exists = cur.fetchone()[0] > 0
+
+    if exists:
+        # actualizar solo campos no nulos
+        parts = []
+        vals = []
+        if obj.clientes_brutos is not None:
+            parts.append("ClientesBrutos=%s"); vals.append(obj.clientes_brutos)
+        if obj.clientes_netos is not None:
+            parts.append("ClientesNetos=%s"); vals.append(obj.clientes_netos)
+        if obj.rgus_netas is not None:
+            parts.append("RGUsNetas=%s"); vals.append(obj.rgus_netas)
+
+        if parts:
+            sql = "UPDATE Objetivos_Edealer SET " + ", ".join(parts) + " WHERE Anio=%s AND Mes=%s"
+            vals.extend([obj.anio, obj.mes])
+            cur.execute(sql, tuple(vals))
+            conn.commit()
+    else:
+        cur.execute(
+            "INSERT INTO Objetivos_Edealer (Anio, Mes, clientes_brutos, clientes_netos, rgus_netas) VALUES (%s,%s,%s,%s,%s)",
+            (obj.anio, obj.mes, obj.clientes_brutos, obj.clientes_netos, obj.rgus_netas)
+        )
+        conn.commit()
+
+    cur.close()
+    conn.close()
+    return {"status":"ok"}
