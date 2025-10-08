@@ -20,38 +20,48 @@ def get_conn():
         password="Inc0nc3rt!2025",
         database="BI_VODAFONE_E2E"
     )
-
 @app.post("/upsert_objetivos")
 def upsert(obj: Objetivo):
-    conn = get_conn()
-    cur = conn.cursor()
-    # ¿Existe?
-    cur.execute("SELECT COUNT(*) FROM Objetivos_Edealer WHERE Anio=%s AND Mes=%s", (obj.anio, obj.mes))
-    exists = cur.fetchone()[0] > 0
-
-    if exists:
-        # actualizar solo campos no nulos
-        parts = []
-        vals = []
-        if obj.clientes_brutos is not None:
-            parts.append("ClientesBrutos=%s"); vals.append(obj.clientes_brutos)
-        if obj.clientes_netos is not None:
-            parts.append("ClientesNetos=%s"); vals.append(obj.clientes_netos)
-        if obj.rgus_netas is not None:
-            parts.append("RGUsNetas=%s"); vals.append(obj.rgus_netas)
-
-        if parts:
-            sql = "UPDATE Objetivos_Edealer SET " + ", ".join(parts) + " WHERE Anio=%s AND Mes=%s"
-            vals.extend([obj.anio, obj.mes])
-            cur.execute(sql, tuple(vals))
-            conn.commit()
-    else:
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        # ¿Existe?
         cur.execute(
-            "INSERT INTO Objetivos_Edealer (Anio, Mes, clientes_brutos, clientes_netos, rgus_netas) VALUES (%s,%s,%s,%s,%s)",
-            (obj.anio, obj.mes, obj.clientes_brutos, obj.clientes_netos, obj.rgus_netas)
+            "SELECT COUNT(*) FROM Objetivos_Edealer WHERE Anio=%s AND Mes=%s",
+            (obj.anio, obj.mes)
         )
-        conn.commit()
+        exists = cur.fetchone()[0] > 0
 
-    cur.close()
-    conn.close()
-    return {"status":"ok"}
+        if exists:
+            parts = []
+            vals = []
+            if obj.clientes_brutos is not None:
+                parts.append("clientes_brutos=%s"); vals.append(obj.clientes_brutos)
+            if obj.clientes_netos is not None:
+                parts.append("clientes_netos=%s"); vals.append(obj.clientes_netos)
+            if obj.rgus_netas is not None:
+                parts.append("rgus_netas=%s"); vals.append(obj.rgus_netas)
+
+            if parts:
+                sql = "UPDATE Objetivos_Edealer SET " + ", ".join(parts) + " WHERE Anio=%s AND Mes=%s"
+                vals.extend([obj.anio, obj.mes])
+                cur.execute(sql, tuple(vals))
+                conn.commit()
+        else:
+            cur.execute(
+                "INSERT INTO Objetivos_Edealer (Anio, Mes, clientes_brutos, clientes_netos, rgus_netas) VALUES (%s,%s,%s,%s,%s)",
+                (obj.anio, obj.mes, obj.clientes_brutos, obj.clientes_netos, obj.rgus_netas)
+            )
+            conn.commit()
+        return {"status": "ok"}
+
+    except mysql.connector.Error as e:
+        return {"status": "error", "message": str(e)}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        try:
+            cur.close()
+            conn.close()
+        except:
+            pass
